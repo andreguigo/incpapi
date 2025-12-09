@@ -21,12 +21,6 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// ---------- CLOUDINARY ----------
-if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-  console.error('Erro: variáveis de ambiente do Cloudinary não configuradas!');
-  process.exit(1);
-}
-
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
