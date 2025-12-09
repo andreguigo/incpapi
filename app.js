@@ -44,7 +44,7 @@ function asString(value) {
 function parseForm(req) {
   return new Promise((resolve, reject) => {
     const form = new IncomingForm({
-      maxFileSize: 25 * 1024 * 1024, // 25MB
+      maxFileSize: 5 * 1024 * 1024, // 5MB
       keepExtensions: true,
       filter: ({ mimetype }) => mimetype && mimetype.includes('image')
     });
@@ -64,7 +64,7 @@ async function uploadToCloudinary(filePath, filename) {
       public_id: filename,
       resource_type: 'image',
       transformation: [
-        { width: 800, height: 800, crop: 'limit' },
+        { width: 256, height: 256, crop: 'limit' },
         { quality: 'auto' },
         { fetch_format: 'auto' }
       ]
