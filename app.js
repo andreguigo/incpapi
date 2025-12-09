@@ -44,7 +44,7 @@ function asString(value) {
 function parseForm(req) {
   return new Promise((resolve, reject) => {
     const form = new IncomingForm({
-      maxFileSize: 5 * 1024 * 1024, // 5MB
+      maxFileSize: 25 * 1024 * 1024, // 25MB
       keepExtensions: true,
       filter: ({ mimetype }) => mimetype && mimetype.includes('image')
     });
