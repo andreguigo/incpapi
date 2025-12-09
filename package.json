@@ -1,0 +1,21 @@
+{
+  "name": "incpapi",
+  "version": "1.0.0",
+  "description": "Registro de voluntários da Igreja do Nazareno Central do Paulista",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
+  },
+  "author": "@andreguigo",
+  "license": "MIT",
+  "dependencies": {
+    "@vercel/blob": "^2.0.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "mongoose": "^9.0.0",
+    "multer": "^2.0.2",
+    "uuid": "^13.0.0"
+  }
+}
