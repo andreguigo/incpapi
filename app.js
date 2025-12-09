@@ -1,13 +1,16 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
+import mongoose from 'mongoose';
+import { v2 as cloudinary } from 'cloudinary';
+import { IncomingForm } from 'formidable';
 
+import User from './models/User.js';
 import { myAge } from './utils/dateUtils.js';
-import { json } from 'stream/consumers';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,115 +21,169 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-const storage = multer.diskStorage({
-	destination: (req, file, cb) => {
-    	const uploadPath = 'uploads/';
-    	if (!fs.existsSync(uploadPath))
-      		fs.mkdirSync(uploadPath);
-    	cb(null, uploadPath);
-	},
+// ---------- CLOUDINARY ----------
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  console.error('Erro: variáveis de ambiente do Cloudinary não configuradas!');
+  process.exit(1);
+}
 
-	filename: (req, file, cb) => {
-		const identifierUser = req.userId;
-		const fileRename = `${file.fieldname}-${identifierUser}${path.extname(file.originalname)}`;
-    	cb(null, fileRename);
-	}
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-const upload = multer({ 
-	storage: storage,
-	limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-	fileFilter: (req, file, cb) => {
-    	const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
-    	allowedTypes.includes(file.mimetype) ? cb(null, true) : cb(new Error('Invalid file type. Only JPEG, PNG, and WEBP are allowed'));
-	}
-}).single('image');
+// ---------- MONGODB ----------
+await mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('MongoDB conectado'))
+  .catch(err => {
+    console.error('Erro MongoDB:', err.message);
+    process.exit(1);
+  });
 
-const filePath = 'users/users.json';
+// ---------- Função utilitária para garantir string ----------
+function asString(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
-app.use('/public', express.static(path.join(__dirname, 'uploads')));
+// ---------- FUNÇÃO PARA PARSE FORM ----------
+function parseForm(req) {
+  return new Promise((resolve, reject) => {
+    const form = new IncomingForm({
+      maxFileSize: 5 * 1024 * 1024, // 5MB
+      keepExtensions: true,
+      filter: ({ mimetype }) => mimetype && mimetype.includes('image')
+    });
 
-app.post('/api', (req, res) => {
-	req.userId = uuidv4();
+    form.parse(req, (err, fields, files) => {
+      if (err) return reject(err);
+      resolve({ fields, files });
+    });
+  });
+}
 
-	try {
-		upload(req, res, (err) => {
-			if (err instanceof multer.MulterError) {
-				return res.status(500).json({ success: false, message: 'Upload error (Multer): ' + err.message });
-			} else if (err) {
-				return res.status(415).json({ success: false, message: 'Content type not supported' });
-			}
+// ---------- FUNÇÃO UPLOAD CLOUDINARY ----------
+async function uploadToCloudinary(filePath, filename) {
+  try {
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder: 'usuarios',
+      public_id: filename,
+      resource_type: 'image',
+      transformation: [
+        { width: 800, height: 800, crop: 'limit' },
+        { quality: 'auto' },
+        { fetch_format: 'auto' }
+      ]
+    });
 
-			if (!req.file) 
-				return res.status(400).json({ success: false, message: 'User photo is required' });
-			
-			let dataExisting = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-			
-			dataExisting.count++;
-			dataExisting.itens.push({ id: req.userId, ...req.body, fileName: req.file.filename });
+    fs.unlinkSync(filePath); // remove temporário
+    return result;
+  } catch (err) {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    throw err;
+  }
+}
 
-			const jsonString = JSON.stringify(dataExisting, null, 4);
-			fs.writeFileSync(filePath, jsonString, 'utf8');
+// ---------- ROTA POST ----------
+app.post('/api', async (req, res) => {
+  const userId = uuidv4();
 
-			res.status(200).json({
-				success: true,
-				message: 'Content saved successfully:',
-				id: req.userId,
-				textData: req.body,
-				file: req.file
-			});
-		});
-	} catch (err) {
-		return res.status(500).json({ success: false, error: err.message });
-	}
+  try {
+    const { fields, files } = await parseForm(req);
+
+    // verifica se arquivo existe
+    const imageFile = Array.isArray(files.image) ? files.image[0] : files.image;
+    if (!imageFile || !imageFile.filepath) {
+      return res.status(400).json({ success: false, message: 'Arquivo de imagem não enviado.' });
+    }
+
+    // gera nome único
+    const fileExtension = imageFile.originalFilename.split('.').pop();
+    const uniqueFilename = `user_${userId}.${fileExtension}`;
+
+    // envia para Cloudinary
+    const cloudinaryResult = await uploadToCloudinary(imageFile.filepath, uniqueFilename);
+
+    // salva no Mongo
+    const newUser = new User({
+      id: userId,
+      fullName: asString(fields.fullName),
+      birthDate: asString(fields.birthDate), // converte para Date
+      phone: asString(fields.phone),
+      selectedVolunteerArea: asString(fields.selectedVolunteerArea),
+      baptismDate: asString(fields.baptismDate), // opcional converter para Date
+      selectedMemberDate: asString(fields.selectedMemberDate),
+      fileNameUrl: cloudinaryResult.secure_url,
+      cloudinaryId: cloudinaryResult.public_id
+    });
+
+    await newUser.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Usuário registrado com sucesso!',
+      data: {
+        id: newUser.id,
+        fullName: newUser.fullName,
+        fileNameUrl: newUser.fileNameUrl
+      }
+    });
+
+  } catch (err) {
+    console.error('Erro no POST /api:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.get('/api', async (req, res) => {
-	try {
-		const data = fs.readFileSync(filePath, 'utf8');
-		const jsonData = JSON.parse(data);
+app.get('/api/', async (req, res) => {
+  try {
+    const users = await User.find();
 
-		const filtered = jsonData.itens.map(item => ({
-			id: item.id,
-			fullName: item.fullName,
-			birthDate: myAge(item.birthDate),
-			selectedVolunteerArea: item.selectedVolunteerArea,
-			selectedMemberDate: item.selectedMemberDate,
-			fileName: item.fileName
-		}));
+    const filtered = users.map(user => ({
+      id: user.id,
+      fullName: user.fullName,
+      birthDate: myAge(user.birthDate),
+      phone: user.phone,
+      selectedVolunteerArea: user.selectedVolunteerArea,
+      baptismDate: user.baptismDate,
+      selectedMemberDate: user.selectedMemberDate,
+      fileNameUrl: user.fileNameUrl
+    }));
 
-    	res.status(200).json( filtered );
-	} catch (err) {
-		console.error('Error processing request:', err);
+    res.status(200).json(filtered);
 
-		return res.status(500).json({ 
-			sucess: false,
-			message: 'Error processing request',
-			error: err.message
-		});
-	}
+  } catch (err) {
+    console.error('Erro no GET /api:', err);
+    res.status(500).json({ success: false, message: 'Erro ao processar requisição', error: err.message });
+  }
 });
 
 app.get('/api/:id', async (req, res) => {
-	try {
-		const data = fs.readFileSync(filePath, 'utf8');
-		const jsonData = JSON.parse(data);
-		
-		const user = jsonData.itens.find(item => item.id === req.params.id);
-		user.birthDate = myAge(user.birthDate);
-    	
-		res.status(200).json( user );
-	} catch (err) {
-		console.error('Error processing request:', err);
+  try {
+    const user = await User.findOne({ id: req.params.id });
 
-		return res.status(500).json({ 
-			sucess: false,
-			message: 'Error processing request',
-			error: err.message
-		});
-	}
+    if (!user) return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
+
+    const result = {
+      id: user.id,
+      fullName: user.fullName,
+      birthDate: myAge(user.birthDate),
+      phone: user.phone,
+      selectedVolunteerArea: user.selectedVolunteerArea,
+      baptismDate: user.baptismDate,
+      selectedMemberDate: user.selectedMemberDate,
+      fileNameUrl: user.fileNameUrl
+    };
+
+    res.status(200).json(result);
+
+  } catch (err) {
+    console.error('Erro no GET /api/:id:', err);
+    res.status(500).json({ success: false, message: 'Erro ao processar requisição', error: err.message });
+  }
 });
 
-app.listen(PORT, () => { console.log(`Server running on port ${PORT}`); });
+// ---------- Inicia servidor ----------
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
 
 export default app;
