@@ -2,8 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
@@ -12,11 +10,8 @@ import { IncomingForm } from 'formidable';
 import User from './models/User.js';
 import { myAge } from './utils/dateUtils.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT;
 
 app.use(cors());
 app.use(express.json());
@@ -27,20 +22,15 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// ---------- MONGODB ----------
-await mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('MongoDB conectado'))
-  .catch(err => {
-    console.error('Erro MongoDB:', err.message);
-    process.exit(1);
-  });
+await mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log('MongoDB connect'))
+  .catch(err => console.error('Connect error:', err.message));
 
-// ---------- Função utilitária para garantir string ----------
 function asString(value) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-// ---------- FUNÇÃO PARA PARSE FORM ----------
 function parseForm(req) {
   return new Promise((resolve, reject) => {
     const form = new IncomingForm({
@@ -56,7 +46,6 @@ function parseForm(req) {
   });
 }
 
-// ---------- FUNÇÃO UPLOAD CLOUDINARY ----------
 async function uploadToCloudinary(filePath, filename) {
   try {
     const result = await cloudinary.uploader.upload(filePath, {
@@ -78,34 +67,28 @@ async function uploadToCloudinary(filePath, filename) {
   }
 }
 
-// ---------- ROTA POST ----------
 app.post('/api', async (req, res) => {
   const userId = uuidv4();
 
   try {
     const { fields, files } = await parseForm(req);
 
-    // verifica se arquivo existe
     const imageFile = Array.isArray(files.image) ? files.image[0] : files.image;
-    if (!imageFile || !imageFile.filepath) {
+    if (!imageFile || !imageFile.filepath)
       return res.status(400).json({ success: false, message: 'Arquivo de imagem não enviado.' });
-    }
 
-    // gera nome único
     const fileExtension = imageFile.originalFilename.split('.').pop();
     const uniqueFilename = `user_${userId}.${fileExtension}`;
 
-    // envia para Cloudinary
     const cloudinaryResult = await uploadToCloudinary(imageFile.filepath, uniqueFilename);
 
-    // salva no Mongo
     const newUser = new User({
       id: userId,
       fullName: asString(fields.fullName),
-      birthDate: asString(fields.birthDate), // converte para Date
+      birthDate: asString(fields.birthDate),
       phone: asString(fields.phone),
       selectedVolunteerArea: asString(fields.selectedVolunteerArea),
-      baptismDate: asString(fields.baptismDate), // opcional converter para Date
+      baptismDate: asString(fields.baptismDate),
       selectedMemberDate: asString(fields.selectedMemberDate),
       fileNameUrl: cloudinaryResult.secure_url,
       cloudinaryId: cloudinaryResult.public_id
@@ -177,7 +160,6 @@ app.get('/api/:id', async (req, res) => {
   }
 });
 
-// ---------- Inicia servidor ----------
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
 
 export default app;
