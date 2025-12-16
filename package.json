@@ -1,23 +1,23 @@
 {
-  "name": "incpapi",
+  "name": "volunteerapi",
   "version": "1.0.0",
-  "description": "Registro de voluntários da Igreja do Nazareno Central do Paulista",
-  "main": "app.js",
-  "type": "module",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node app.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "author": "@andreguigo",
   "license": "MIT",
   "dependencies": {
-    "@vercel/blob": "^2.0.0",
     "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
-    "express": "^5.1.0",
+    "express": "^4.18.0",
     "formidable": "^3.5.4",
-    "mongoose": "^9.0.0",
-    "uuid": "^13.0.0"
+    "mongoose": "^7.0.0",
+    "uuidv4": "^6.2.13"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.0"
   }
 }

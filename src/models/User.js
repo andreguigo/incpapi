@@ -1,5 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
-import mongoose from 'mongoose';
+const mongoose = require('mongoose');
+const uuidv4 = require('uuid').v4;
 
 const UserSchema = new mongoose.Schema(
   {
@@ -20,7 +20,7 @@ const UserSchema = new mongoose.Schema(
       required: true
     },
 
-    phone: {
+    phoneUser: {
       type: String,
       required: true
     },
@@ -29,14 +29,14 @@ const UserSchema = new mongoose.Schema(
         type: [String],
         default: [],
         set: v => {
-            if (!v) return [];                          // trata undefined, null ou vazio
+            if (!v) return [];
             if (Array.isArray(v)) 
-            return v.filter(Boolean).map(i => String(i).trim());
+              return v.filter(Boolean).map(i => String(i).trim());
 
             return String(v)
-            .split(',')
-            .map(i => i.trim())
-            .filter(Boolean);                          // remove valores vazios
+              .split(',')
+              .map(i => i.trim())
+              .filter(Boolean);
         }
     },
 
@@ -57,7 +57,7 @@ const UserSchema = new mongoose.Schema(
 
     cloudinaryId: {
       type: String,
-      required: true
+      required: false
     },
   },
   {
@@ -65,6 +65,4 @@ const UserSchema = new mongoose.Schema(
   }
 );
 
-const User = mongoose.model('User', UserSchema);
-
-export default User;
+module.exports = mongoose.model('User', UserSchema);
