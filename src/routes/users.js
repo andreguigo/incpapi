@@ -1,69 +1,54 @@
-const router = require('express').Router();
-const User = require('../models/User');
-const parseForm = require('../utils/parseForm');
-const uploadToCloudinary = require('../utils/uploadToCloudinary');
-const asString = require('../utils/asString');
+require('dotenv').config();
+const config = require("../config/auth");
+const { verifySignUp } = require("../middleware");
+const User = require("../models/User");
+const router = require("./customers");
 
-// get all
-router.get('/', async (req, res) => {
-  const users = await User.find();
-  res.json(users);
-});
+let jwt = require("jsonwebtoken");
+let bcrypt = require("bcryptjs");
 
-// get by id
-router.get('/:id', async (req, res) => {
-  const user = await User.findOne({ id: req.params.id });
-  if (!user) return res.status(404).json({ error: 'Não encontrado' });
-  res.json(user);
-});
-
-router.post('/', async (req, res) => {
-  try {
-    const { fields, files } = await parseForm(req);
-
-    const imageFile = Array.isArray(files.image) ? files.image[0] : files.image;
-    if (!imageFile || !imageFile.filepath)
-      return res.status(400).json({ success: false, message: 'Arquivo de imagem não enviado.' });
-
-    const fileExtension = imageFile.originalFilename.split('.').pop();
-    const uniqueFilename = `user_${crypto.randomUUID()}_${fields.fullName}.${fileExtension}`;
-    const cloudinaryResult = await uploadToCloudinary(imageFile.filepath, uniqueFilename);
-
-    const newUser = new User({ 
-      fullName: asString(fields.fullName),
-      birthDate: asString(fields.birthDate),
-      phoneUser: asString(fields.phoneUser),
-      selectedVolunteerArea: asString(fields.selectedVolunteerArea),
-      baptismDate: asString(fields.baptismDate),
-      selectedMemberDate: asString(fields.selectedMemberDate),
-      fileNameUrl: cloudinaryResult.secure_url,
-      cloudinaryId: cloudinaryResult.public_id
+router.post("/signup", [verifySignUp.checkDuplicateUsernameOrEmail], async (req, res) => {
+    await User.create({
+        username: req.body.username,
+        password: bcrypt.hashSync(req.body.password, 8)
+    }).then(() => {
+        res.send({ message: "User registered successfully!" });
+    }).catch(err => {
+        res.status(500).send({ message: err.message });
     });
+});
 
-    await newUser.save();
-    res.status(201).json({
-      success: true,
-      message: 'Usuário registrado com sucesso!',
-      data: {
-        id: newUser.id,
-        fullName: newUser.fullName, 
-        fileNameUrl: newUser.fileNameUrl
-      }
+router.post("/signin", async (req, res) => {
+    await User.findOne({ username: req.body.username })
+    .then(async (user) => {
+        if (!user) {
+            return res.status(404).send({ message: "User Not found." });
+        }
+
+        const passwordIsValid = bcrypt.compareSync(
+            req.body.password,
+            user.password
+        );
+
+        if (!passwordIsValid) {
+            return res.status(401).send({
+            accessToken: null,
+            message: "Invalid Password!"
+            });
+        }
+
+        let token = jwt.sign({ id: user.id }, config.secret, {
+            expiresIn: config.jwtExpiration
+        });
+
+        res.status(200).send({
+            id: user.id,
+            username: user.username,
+            accessToken: token
+        });
+    }).catch(err => {
+        res.status(500).send({ message: err.message });
     });
-  } catch (err) {
-    console.error('Erro ao criar usuário:', err);
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-/*
-router.put('/:id', async (req, res) => {
-  const updated = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  res.json(updated);
 });
 
-router.delete('/:id', async (req, res) => {
-  await User.findByIdAndDelete(req.params.id);
-  res.json({ message: 'Removido com sucesso' });
-});
-*/
 module.exports = router;
