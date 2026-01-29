@@ -18,7 +18,7 @@ router.get('/:id', [authJwt.verifyToken], async (req, res) => {
 });
 
 // create customer
-router.post('/', [authJwt.verifyToken], async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { fields, files } = await parseForm(req);
 
@@ -33,7 +33,7 @@ router.post('/', [authJwt.verifyToken], async (req, res) => {
     const newCustomer = new Customer({ 
       fullName: asString(fields.fullName),
       birthDate: asString(fields.birthDate),
-      phoneUser: asString(fields.phoneUser),
+      phoneCustomer: asString(fields.phoneCustomer),
       selectedVolunteerArea: asString(fields.selectedVolunteerArea),
       baptismDate: asString(fields.baptismDate),
       selectedMemberDate: asString(fields.selectedMemberDate),
