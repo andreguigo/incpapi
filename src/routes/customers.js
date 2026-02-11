@@ -1,8 +1,14 @@
 const router = require('express').Router();
 const Customer = require('../models/Customer');
 const parseForm = require('../utils/parseForm');
-const { uploadToCloudinary, authJwt } = require('../middleware');
+const { uploadToCloudinary, authJwt, exportCustomers } = require('../middleware');
 const asString = require('../utils/asString');
+
+// exports all
+router.get('/export', [authJwt.verifyToken], async (req, res) => {
+  const customers = await Customer.find().lean();
+  exportCustomers.exportCustomersExcel(req, res, customers);
+});
 
 // get all
 router.get('/', [authJwt.verifyToken], async (req, res) => {
@@ -24,7 +30,7 @@ router.post('/', async (req, res) => {
 
     const imageFile = Array.isArray(files.image) ? files.image[0] : files.image;
     if (!imageFile || !imageFile.filepath)
-      return res.status(400).json({ success: false, message: 'Arquivo de imagem não enviado.' });
+      return res.status(400).json({ success: false, message: 'Arquivo de imagem não enviado' });
 
     const fileExtension = imageFile.originalFilename.split('.').pop();
     const uniqueFilename = `user_${crypto.randomUUID()}_${fields.fullName}.${fileExtension}`;
@@ -44,7 +50,7 @@ router.post('/', async (req, res) => {
     await newCustomer.save();
     res.status(201).json({
       success: true,
-      message: 'Cliente registrado com sucesso!',
+      message: 'Cliente registrado com sucesso',
       data: {
         id: newCustomer.id,
         fullName: newCustomer.fullName, 
